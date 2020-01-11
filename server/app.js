@@ -17,6 +17,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 
 
+
 app.get('/',
   (req, res) => {
     res.render('login');
@@ -88,7 +89,7 @@ app.post('/signup',
     //console.log('req.body: ', req.body);
     var username = req.body.username;
     var password = req.body.password;
-    models.Users.create({username, password})
+    models.Users.create({ username, password })
       .then(() => {
         res.set({location: '/'});
         res.render('index');
@@ -112,6 +113,9 @@ app.post('/login',
   (req, res, next) => {
     //console.log(req.body);
     Auth.createSession(req, res)
+      .then(authResult => {
+        console.log('authResult', authResult);
+      })
       .error(error => {
         console.log('error: ', error);
       })
