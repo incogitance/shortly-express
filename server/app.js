@@ -84,16 +84,19 @@ app.post('/links',
 /************************************************************/
 
 app.post('/signup',
-  (req, res, data) => {
-    console.log('req.body: ', req.body);
+  (req, res, next) => {
+    //console.log('req.body: ', req.body);
     var username = req.body.username;
     var password = req.body.password;
     models.Users.create({username, password})
       .then(() => {
-        res.render('login');
+        res.set({location: '/'});
+        res.render('index');
       })
       .error(error => {
         if ( error.errno === 1062) {
+          //window.location.replace("#/signup");
+          res.set({location: '/signup'});
           res.render('signup');
         } else {
           res.status(500).send(error);
@@ -106,19 +109,18 @@ app.post('/signup',
 
 
 app.post('/login',
-  (req, res, data) => {
-  // get salt and add to pw and hash = hashed pw
-  //check username with hashed pw on users table
-  //if ===, serve up links page '/'
-  //if user is verified and there is an active session, send to linkpage
-  // .error(error => {
-  //   res.status(500).send(error);
-  // })
-  // .catch(linkpage => {
-  //   res.status(200).send(linkpage);
-  // });
-
+  (req, res, next) => {
+    //console.log(req.body);
+    Auth.createSession(req, res)
+      .error(error => {
+        console.log('error: ', error);
+      })
+      .catch(page => {
+        console.log('/login catch-page:', page);
+        res.status(200).send(page);
+      });
   });
+//TODO move to login handler ---if user is verified and there is an active session, send to linkpage
 
 /************************************************************/
 // Handle the code parameter route last - if all other routes fail
