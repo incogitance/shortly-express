@@ -1,47 +1,48 @@
 const models = require('../models');
 const Promise = require('bluebird');
 
-module.exports.createSession = (req, res) => {
-  var username = req.body.username;
-  var attempted = req.body.password;
-  var options =
-  {
-    username
-  };
-
-  return models.Users.get(options)
-    .then((userResult) => {
-      console.log('queryResults', userResult);
-      if (userResult) {
-        userResult.compareResult = models.Users.compare(attempted, userResult.password, userResult.salt);
-        return userResult;
-      } else {
-        return false;
+module.exports.createSession = (req, res, next) => {
+  Promise.resolve(req.cookies.homerSimpson)
+    .then((hash) => {
+    //if there is no hash
+      if (!hash) {
+      //create session
+        throw hash;
+      }
+      return models.Sessions.get({hash});
+    })
+    .tap((session) => {
+      if (!session) {
+        throw session;
       }
     })
-    .then((userResult) => {
-      console.log('mutated queryResult: ', userResult);
-      if (userResult.compareResult) {
-
-        // models.Sessions.create(userResult.id);
-        var session = models.Sessions.get({ userId: userResult.id });
-        console.log('get session: ', session);
-        if (session.id) {
+    .catch(() => {
+      return models.Sessions.create()
+        .then(results => {
+          // console.log('results from session create:',results);
+          return models.Sessions.get({ id: results.insertId });
+        })
+        .then((session) => {
+          // console.log('session after session create', session);
+          res.cookie('homerSimpson', session.hash);
           return session;
-        } else {
-          models.Sessions.create(userResult.id);
-          return models.Sessions.get({ userId: userResult.id });
-        }
-      }
+        });
     })
-    .then(session => {
-      console.log('the session: ', session);
+    .then((session) => {
+      req.session = session;
+      next();
+    });
 
-    })
-    .error(error => { throw error; });
 };
 
 
 /************************************************************/
 // Add additional authentication middleware functions below
 /************************************************************/
+module.exports.verifySession = (req, res, next) => {
+  if (!models.Sessions.isLoggedIn(req.session)) {
+    res.redirect('/login');
+  } else {
+    next();
+  }
+};

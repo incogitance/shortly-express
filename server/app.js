@@ -15,12 +15,13 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, '../public')));
 
+app.use(require('./middleware/cookieParser'));
+app.use(Auth.createSession);
 
 
-
-app.get('/',
+app.get('/', Auth.verifySession,
   (req, res) => {
-    res.render('login');
+    res.render('index');
   });
 
 app.get('/signup',
@@ -28,12 +29,12 @@ app.get('/signup',
     res.render('signup');
   });
 
-app.get('/create',
+app.get('/create', Auth.verifySession,
   (req, res) => {
     res.render('index');
   });
 
-app.get('/links',
+app.get('/links', Auth.verifySession,
   (req, res, next) => {
     models.Links.getAll()
       .then(links => {
@@ -44,7 +45,7 @@ app.get('/links',
       });
   });
 
-app.post('/links',
+app.post('/links', Auth.verifySession,
   (req, res, next) => {
     var url = req.body.url;
     if (!models.Links.isValidUrl(url)) {
@@ -84,47 +85,72 @@ app.post('/links',
 // Write your authentication routes here
 /************************************************************/
 
-app.post('/signup',
-  (req, res, next) => {
-    //console.log('req.body: ', req.body);
-    var username = req.body.username;
-    var password = req.body.password;
-    models.Users.create({ username, password })
-      .then(() => {
-        res.set({location: '/'});
-        res.render('index');
-      })
-      .error(error => {
-        if ( error.errno === 1062) {
-          //window.location.replace("#/signup");
-          res.set({location: '/signup'});
-          res.render('signup');
-        } else {
-          res.status(500).send(error);
-        }
-      })
-      .catch(page => {
-        res.status(200).send(page);
-      });
+app.get('/login',
+  (req, res) => {
+    res.render('login');
   });
-
 
 app.post('/login',
   (req, res, next) => {
-    //console.log(req.body);
-    Auth.createSession(req, res)
-      .then(authResult => {
-        console.log('authResult', authResult);
+    var username = req.body.username;
+    var password = req.body.password;
+    return models.Users.get({ username })
+      .then(user => {
+        if (!user || !models.Users.compare(password, user.password, user.salt)) {
+        // user isnt in database or password mis-match
+          throw new Error('Username and password do not match');
+        }
+        return models.Sessions.update({ hash: req.session.hash }, { userId: user.id });
+      })
+      .then(() => {
+        res.redirect('/');
       })
       .error(error => {
-        console.log('error: ', error);
+        res.status(500).send(error);
       })
-      .catch(page => {
-        console.log('/login catch-page:', page);
-        res.status(200).send(page);
+      .catch(() => {
+        res.redirect('/login');
       });
   });
-//TODO move to login handler ---if user is verified and there is an active session, send to linkpage
+
+app.post('/signup',
+  (req, res, next) => {
+    // console.log('req.body: ', req.body);
+    var username = req.body.username;
+    var password = req.body.password;
+
+    return models.Users.get({ username })
+
+      .then((user) => {
+        if (user) {
+          throw user;
+        }
+        return models.Users.create({ username, password });
+      })
+      .then((results) => {
+        return models.Sessions.update({hash: req.session.hash}, { userId: results.insertId});
+      })
+      .then(() => {
+        res.redirect('/');
+      })
+      .error((error) => {
+        res.status(500).send(error);
+      })
+      .catch(() => {
+        res.redirect('/signup');
+      });
+  });
+
+app.get('/logout', (req, res, next) => {
+  return models.Sessions.delete({ hash: req.cookies.homerSimpson })
+    .then(() => {
+      res.clearCookie('homerSimpson');
+      res.redirect('/login');
+    })
+    .error(error => {
+      res.status(500).send(error);
+    });
+});
 
 /************************************************************/
 // Handle the code parameter route last - if all other routes fail
